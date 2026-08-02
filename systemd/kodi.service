@@ -1,0 +1,28 @@
+[Unit]
+Description=Kodi Media Center (démarrage automatique)
+# Ne démarre qu'une fois l'audio + l'enceinte Bluetooth + le TTS Piper prêts.
+After=kodi-wait-ready.service
+Requires=kodi-wait-ready.service
+# Volontairement PAS de dépendance sur un écran/HDMI : Kodi doit démarrer
+# même sans câble HDMI branché (gestion du hotplug faite par Kodi/KMS).
+
+[Service]
+Type=simple
+User=__KODI_USER__
+Group=__KODI_USER__
+# Adapter cette ligne à la commande utilisée manuellement jusqu'ici
+# (ex: kodi-standalone, ou "kodi", ou un script de lancement custom).
+# Valeur définie/substituée par scripts/install.sh à partir de KODI_EXEC.
+ExecStart=__KODI_EXEC__
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+# Nécessaire pour que Kodi puisse accéder au DRM/KMS (accès /dev/dri, /dev/tty1).
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
