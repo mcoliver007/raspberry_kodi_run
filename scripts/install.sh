@@ -1,92 +1,87 @@
 #!/usr/bin/env bash
 #
-# install.sh — installe le service de démarrage automatique de Kodi
-# (avec attente audio + enceinte Bluetooth + TTS Piper) sur la Raspberry Pi.
+# install.sh — installe le service de démarrage automatique de Kodi comme
+# unités systemd *utilisateur*, liées symboliquement (systemctl --user link)
+# aux fichiers du repo — même convention que piper-tts.service.
 #
-# À exécuter en root (sudo) depuis une copie locale du dépôt sur la Pi :
-#   sudo ./scripts/install.sh
+# IMPORTANT : le repo doit rester en permanence à l'emplacement
+#   ~/raspberry_kodi_run   (ex: /home/pi/raspberry_kodi_run)
+# car les unités référencent ce chemin via le spécificateur systemd "%h".
 #
-# Variables d'environnement acceptées :
-#   KODI_USER     utilisateur Linux sous lequel Kodi doit tourner (défaut: pi)
-#   KODI_EXEC     commande de lancement de Kodi, identique à celle utilisée
-#                 manuellement jusqu'ici (défaut: /usr/bin/kodi)
-#   BT_SINK_MATCH motif du sink PulseAudio Bluetooth (défaut: bluez_sink)
-#   PIPER_SERVICE nom de l'unité systemd du serveur TTS (défaut: piper-tts.service)
-#   PIPER_SOCKET  chemin du socket Unix Piper (défaut: /tmp/piper_tts.sock)
-#   WAIT_TIMEOUT  timeout en secondes pour chaque étape d'attente (défaut: 90)
-#   ANNOUNCE_TEXT phrase annoncée vocalement une fois Kodi démarré, pour
-#                 confirmer que le son fonctionne (défaut ci-dessous)
+# À exécuter en tant qu'utilisateur "pi" (PAS avec sudo), depuis le repo :
+#   ~/raspberry_kodi_run/scripts/install.sh
+#
+# Une seule étape nécessite les droits root (activer le démarrage des
+# services utilisateur sans connexion) : le script invoquera "sudo" lui-même
+# uniquement pour cette commande (loginctl enable-linger).
 
 set -euo pipefail
 
-if [ "$(id -u)" -ne 0 ]; then
-    echo "Ce script doit être exécuté en root (sudo ./scripts/install.sh)." >&2
-    exit 1
-fi
-
-KODI_USER="${KODI_USER:-pi}"
-KODI_EXEC="${KODI_EXEC:-/usr/bin/kodi}"
-BT_SINK_MATCH="${BT_SINK_MATCH:-bluez_sink}"
-PIPER_SERVICE="${PIPER_SERVICE:-piper-tts.service}"
-PIPER_SOCKET="${PIPER_SOCKET:-/tmp/piper_tts.sock}"
-WAIT_TIMEOUT="${WAIT_TIMEOUT:-90}"
-ANNOUNCE_TEXT="${ANNOUNCE_TEXT:-Kodi est démarré. Le son fonctionne correctement.}"
-
-if ! id "$KODI_USER" >/dev/null 2>&1; then
-    echo "ERREUR: l'utilisateur '${KODI_USER}' n'existe pas sur ce système." >&2
+if [ "$(id -u)" -eq 0 ]; then
+    echo "Ce script doit être exécuté en tant qu'utilisateur normal (pi), PAS avec sudo." >&2
+    echo "Il invoquera sudo lui-même si besoin pour la seule étape qui le nécessite." >&2
     exit 1
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+EXPECTED_ROOT="${HOME}/raspberry_kodi_run"
 
-echo "==> Installation des scripts dans /usr/local/bin"
-install -m 755 "$REPO_ROOT/scripts/wait-for-bluetooth-audio.sh" /usr/local/bin/wait-for-bluetooth-audio.sh
-install -m 755 "$REPO_ROOT/scripts/wait-for-piper-tts.sh" /usr/local/bin/wait-for-piper-tts.sh
-install -m 755 "$REPO_ROOT/scripts/announce-kodi-ready.py" /usr/local/bin/announce-kodi-ready.py
+if [ "$REPO_ROOT" != "$EXPECTED_ROOT" ]; then
+    echo "ERREUR: le repo doit se trouver dans '${EXPECTED_ROOT}' (trouvé: '${REPO_ROOT})." >&2
+    echo "Les unités systemd référencent ce chemin fixe via %h/raspberry_kodi_run." >&2
+    exit 1
+fi
 
-echo "==> Écriture de la configuration /etc/default/kodi-service"
-cat > /etc/default/kodi-service <<EOF
-# Généré par scripts/install.sh — modifiable manuellement puis
-# "systemctl restart kodi-wait-ready.service kodi.service"
-KODI_USER=${KODI_USER}
-BT_SINK_MATCH=${BT_SINK_MATCH}
-PIPER_SERVICE=${PIPER_SERVICE}
-PIPER_SOCKET=${PIPER_SOCKET}
-WAIT_TIMEOUT=${WAIT_TIMEOUT}
-POLL_INTERVAL=2
-ANNOUNCE_TEXT=${ANNOUNCE_TEXT}
-EOF
+echo "==> Rendre les scripts exécutables"
+chmod +x "$REPO_ROOT"/scripts/*.sh "$REPO_ROOT"/scripts/*.py
 
-echo "==> Installation des unités systemd"
-sed -e "s#__KODI_USER__#${KODI_USER}#g" \
-    -e "s#__KODI_EXEC__#${KODI_EXEC}#g" \
-    "$REPO_ROOT/systemd/kodi.service" > /etc/systemd/system/kodi.service
+echo "==> Préparation de la configuration (config/kodi-service.env)"
+if [ ! -f "$REPO_ROOT/config/kodi-service.env" ]; then
+    cp "$REPO_ROOT/config/kodi-service.env.example" "$REPO_ROOT/config/kodi-service.env"
+    echo "    Créé à partir de l'exemple. Vérifie/adapte : $REPO_ROOT/config/kodi-service.env"
+else
+    echo "    Déjà présent, non modifié : $REPO_ROOT/config/kodi-service.env"
+fi
 
-install -m 644 "$REPO_ROOT/systemd/kodi-wait-ready.service" /etc/systemd/system/kodi-wait-ready.service
-install -m 644 "$REPO_ROOT/systemd/kodi-announce-ready.service" /etc/systemd/system/kodi-announce-ready.service
+echo "==> Lien symbolique des unités systemd utilisateur"
+mkdir -p "$HOME/.config/systemd/user"
+systemctl --user link \
+    "$REPO_ROOT/systemd/kodi-wait-ready.service" \
+    "$REPO_ROOT/systemd/kodi.service" \
+    "$REPO_ROOT/systemd/kodi-announce-ready.service"
 
-echo "==> Rechargement de systemd et activation des services"
-systemctl daemon-reload
-systemctl enable kodi-wait-ready.service
-systemctl enable kodi.service
-systemctl enable kodi-announce-ready.service
+echo "==> Activation des services"
+systemctl --user daemon-reload
+systemctl --user enable kodi-wait-ready.service
+systemctl --user enable kodi.service
+systemctl --user enable kodi-announce-ready.service
+
+echo "==> Activation du démarrage sans connexion (loginctl enable-linger)"
+if command -v loginctl >/dev/null && loginctl show-user "$USER" -p Linger 2>/dev/null | grep -q "Linger=yes"; then
+    echo "    Linger déjà actif pour ${USER}."
+else
+    sudo loginctl enable-linger "$USER"
+    echo "    Linger activé pour ${USER}."
+fi
 
 cat <<EOF
 
 Installation terminée.
 
+Comme les unités sont liées (pas copiées), toute modification des fichiers
+dans $REPO_ROOT/systemd/ est prise en compte après :
+  systemctl --user daemon-reload
+
 Vérifications à faire avant de redémarrer :
-  - Confirme que '${PIPER_SERVICE}' est bien lié/activé :
-      systemctl status ${PIPER_SERVICE}
-  - Si tu connais le chemin du socket Unix de Piper, relance l'install avec
-    PIPER_SOCKET=/chemin/vers/le.sock pour une vérification plus stricte.
-  - Adapte KODI_EXEC si la commande de lancement habituelle de Kodi diffère
-    de "${KODI_EXEC}" (édite /etc/systemd/system/kodi.service, ligne ExecStart).
+  - Adapte si besoin $REPO_ROOT/config/kodi-service.env (notamment KODI_EXEC
+    si ta commande de lancement de Kodi diffère de "/usr/bin/kodi").
+  - Confirme que piper-tts.service est bien actif :
+      systemctl --user status piper-tts.service
 
 Test manuel sans redémarrer :
-  sudo systemctl start kodi-wait-ready.service
-  journalctl -u kodi-wait-ready.service -f
-  sudo systemctl start kodi.service
-  journalctl -u kodi-announce-ready.service -f
+  systemctl --user start kodi-wait-ready.service
+  journalctl --user -u kodi-wait-ready.service -f
+  systemctl --user start kodi.service
+  journalctl --user -u kodi.service -u kodi-announce-ready.service -f
 EOF

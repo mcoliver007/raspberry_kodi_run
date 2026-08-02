@@ -7,14 +7,15 @@
 # soit réellement opérationnel avant de démarrer Kodi.
 #
 # Deux vérifications successives :
-#   1. l'unité systemd piper-tts.service est "active" (démarrée avec succès) ;
+#   1. l'unité systemd *utilisateur* piper-tts.service est "active" (démarrée
+#      avec succès) ;
 #   2. si PIPER_SOCKET est renseigné, le socket Unix existe bien sur le
 #      disque (preuve que le serveur a fini son initialisation et écoute).
 #      Si PIPER_SOCKET n'est pas défini, cette 2e étape est ignorée : on se
 #      fie uniquement à l'état actif de l'unité systemd.
 #
 # Variables :
-#   PIPER_SERVICE  nom de l'unité systemd du serveur TTS (défaut: piper-tts.service)
+#   PIPER_SERVICE  nom de l'unité systemd utilisateur du serveur TTS (défaut: piper-tts.service)
 #   PIPER_SOCKET   chemin du socket Unix créé par le serveur (optionnel,
 #                  à renseigner si connu, ex: /run/piper-tts/piper.sock)
 #   WAIT_TIMEOUT   délai max en secondes avant abandon (défaut: 60)
@@ -34,7 +35,7 @@ log() {
 deadline=$(( $(date +%s) + WAIT_TIMEOUT ))
 
 log "Attente de l'activation du service '${PIPER_SERVICE}'..."
-while ! systemctl is-active --quiet "$PIPER_SERVICE"; do
+while ! systemctl --user is-active --quiet "$PIPER_SERVICE"; do
     if [ "$(date +%s)" -ge "$deadline" ]; then
         log "ERREUR: timeout, '${PIPER_SERVICE}' n'est pas actif après ${WAIT_TIMEOUT}s."
         exit 1

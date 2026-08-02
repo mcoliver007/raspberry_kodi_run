@@ -8,21 +8,14 @@ Requires=kodi-wait-ready.service
 
 [Service]
 Type=simple
-User=__KODI_USER__
-Group=__KODI_USER__
-# Adapter cette ligne à la commande utilisée manuellement jusqu'ici
-# (ex: kodi-standalone, ou "kodi", ou un script de lancement custom).
-# Valeur définie/substituée par scripts/install.sh à partir de KODI_EXEC.
-ExecStart=__KODI_EXEC__
+EnvironmentFile=-%h/raspberry_kodi_run/config/kodi-service.env
+WorkingDirectory=%h/raspberry_kodi_run
+# KODI_EXEC (config/kodi-service.env) définit la commande réelle lancée ;
+# ce script se contente de l'exécuter (voir scripts/start-kodi.sh).
+ExecStart=%h/raspberry_kodi_run/scripts/start-kodi.sh
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=15
 
-# Nécessaire pour que Kodi puisse accéder au DRM/KMS (accès /dev/dri, /dev/tty1).
-TTYPath=/dev/tty1
-StandardInput=tty
-StandardOutput=journal
-StandardError=journal
-
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
