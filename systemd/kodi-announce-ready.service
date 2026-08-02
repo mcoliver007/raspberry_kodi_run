@@ -1,0 +1,16 @@
+[Unit]
+Description=Annonce vocale confirmant le démarrage de Kodi et le bon fonctionnement du son
+After=kodi.service
+Requires=kodi.service
+PartOf=kodi.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/kodi-service
+# Petit délai pour laisser Kodi terminer son initialisation avant l'annonce.
+ExecStartPre=/bin/sleep 5
+ExecStart=/usr/local/bin/announce-kodi-ready.py
+TimeoutStartSec=30
+
+[Install]
+WantedBy=kodi.service

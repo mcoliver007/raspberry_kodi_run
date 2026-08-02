@@ -14,6 +14,8 @@
 #   PIPER_SERVICE nom de l'unité systemd du serveur TTS (défaut: piper-tts.service)
 #   PIPER_SOCKET  chemin du socket Unix Piper (défaut: /tmp/piper_tts.sock)
 #   WAIT_TIMEOUT  timeout en secondes pour chaque étape d'attente (défaut: 90)
+#   ANNOUNCE_TEXT phrase annoncée vocalement une fois Kodi démarré, pour
+#                 confirmer que le son fonctionne (défaut ci-dessous)
 
 set -euo pipefail
 
@@ -28,6 +30,7 @@ BT_SINK_MATCH="${BT_SINK_MATCH:-bluez_sink}"
 PIPER_SERVICE="${PIPER_SERVICE:-piper-tts.service}"
 PIPER_SOCKET="${PIPER_SOCKET:-/tmp/piper_tts.sock}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-90}"
+ANNOUNCE_TEXT="${ANNOUNCE_TEXT:-Kodi est démarré. Le son fonctionne correctement.}"
 
 if ! id "$KODI_USER" >/dev/null 2>&1; then
     echo "ERREUR: l'utilisateur '${KODI_USER}' n'existe pas sur ce système." >&2
@@ -40,6 +43,7 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 echo "==> Installation des scripts dans /usr/local/bin"
 install -m 755 "$REPO_ROOT/scripts/wait-for-bluetooth-audio.sh" /usr/local/bin/wait-for-bluetooth-audio.sh
 install -m 755 "$REPO_ROOT/scripts/wait-for-piper-tts.sh" /usr/local/bin/wait-for-piper-tts.sh
+install -m 755 "$REPO_ROOT/scripts/announce-kodi-ready.py" /usr/local/bin/announce-kodi-ready.py
 
 echo "==> Écriture de la configuration /etc/default/kodi-service"
 cat > /etc/default/kodi-service <<EOF
@@ -51,6 +55,7 @@ PIPER_SERVICE=${PIPER_SERVICE}
 PIPER_SOCKET=${PIPER_SOCKET}
 WAIT_TIMEOUT=${WAIT_TIMEOUT}
 POLL_INTERVAL=2
+ANNOUNCE_TEXT=${ANNOUNCE_TEXT}
 EOF
 
 echo "==> Installation des unités systemd"
@@ -59,11 +64,13 @@ sed -e "s#__KODI_USER__#${KODI_USER}#g" \
     "$REPO_ROOT/systemd/kodi.service" > /etc/systemd/system/kodi.service
 
 install -m 644 "$REPO_ROOT/systemd/kodi-wait-ready.service" /etc/systemd/system/kodi-wait-ready.service
+install -m 644 "$REPO_ROOT/systemd/kodi-announce-ready.service" /etc/systemd/system/kodi-announce-ready.service
 
 echo "==> Rechargement de systemd et activation des services"
 systemctl daemon-reload
 systemctl enable kodi-wait-ready.service
 systemctl enable kodi.service
+systemctl enable kodi-announce-ready.service
 
 cat <<EOF
 
@@ -81,4 +88,5 @@ Test manuel sans redémarrer :
   sudo systemctl start kodi-wait-ready.service
   journalctl -u kodi-wait-ready.service -f
   sudo systemctl start kodi.service
+  journalctl -u kodi-announce-ready.service -f
 EOF
