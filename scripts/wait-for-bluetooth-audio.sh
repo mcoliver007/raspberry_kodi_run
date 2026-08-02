@@ -48,13 +48,20 @@ while true; do
     sinks="$(pactl list sinks 2>/dev/null || true)"
 
     if [ -n "$sinks" ] && echo "$sinks" | grep -q "$BT_SINK_MATCH"; then
-        # On isole le bloc du sink bluetooth et on vérifie son état
-        # (RUNNING ou IDLE = connecté et prêt ; SUSPENDED = pas de flux/pas
-        # vraiment opérationnel).
-        state="$(echo "$sinks" | awk -v pat="$BT_SINK_MATCH" '
-            /^Sink #/ { in_bt = 0 }
-            $0 ~ "Name: .*" pat { in_bt = 1 }
-            in_bt && /State:/ { print $2; exit }
+        # On isole le bloc du sink bluetooth (chaque sink est un paragraphe
+        # séparé par une ligne vide dans la sortie de "pactl list sinks") et
+        # on vérifie son état (RUNNING ou IDLE = connecté et prêt ;
+        # SUSPENDED = pas de flux/pas vraiment opérationnel). Attention :
+        # la ligne "State:" apparaît AVANT la ligne "Name:" dans chaque
+        # bloc, d'où le traitement paragraphe par paragraphe plutôt que
+        # ligne par ligne.
+        state="$(echo "$sinks" | awk -v RS="" -v pat="$BT_SINK_MATCH" '
+            $0 ~ pat {
+                if (match($0, /State: [A-Za-z]+/)) {
+                    print substr($0, RSTART + 7, RLENGTH - 7)
+                }
+                exit
+            }
         ')"
 
         if [ "$state" = "RUNNING" ] || [ "$state" = "IDLE" ]; then
