@@ -4,15 +4,15 @@
 # (avec attente audio + enceinte Bluetooth + TTS Piper) sur la Raspberry Pi.
 #
 # À exécuter en root (sudo) depuis une copie locale du dépôt sur la Pi :
-#   sudo KODI_USER=pi KODI_EXEC=/usr/bin/kodi-standalone ./scripts/install.sh
+#   sudo ./scripts/install.sh
 #
 # Variables d'environnement acceptées :
 #   KODI_USER     utilisateur Linux sous lequel Kodi doit tourner (défaut: pi)
 #   KODI_EXEC     commande de lancement de Kodi, identique à celle utilisée
-#                 manuellement jusqu'ici (défaut: /usr/bin/kodi-standalone)
+#                 manuellement jusqu'ici (défaut: /usr/bin/kodi)
 #   BT_SINK_MATCH motif du sink PulseAudio Bluetooth (défaut: bluez_sink)
 #   PIPER_SERVICE nom de l'unité systemd du serveur TTS (défaut: piper-tts.service)
-#   PIPER_SOCKET  chemin du socket Unix Piper si connu (optionnel)
+#   PIPER_SOCKET  chemin du socket Unix Piper (défaut: /tmp/piper_tts.sock)
 #   WAIT_TIMEOUT  timeout en secondes pour chaque étape d'attente (défaut: 90)
 
 set -euo pipefail
@@ -23,10 +23,10 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 KODI_USER="${KODI_USER:-pi}"
-KODI_EXEC="${KODI_EXEC:-/usr/bin/kodi-standalone}"
+KODI_EXEC="${KODI_EXEC:-/usr/bin/kodi}"
 BT_SINK_MATCH="${BT_SINK_MATCH:-bluez_sink}"
 PIPER_SERVICE="${PIPER_SERVICE:-piper-tts.service}"
-PIPER_SOCKET="${PIPER_SOCKET:-}"
+PIPER_SOCKET="${PIPER_SOCKET:-/tmp/piper_tts.sock}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-90}"
 
 if ! id "$KODI_USER" >/dev/null 2>&1; then
