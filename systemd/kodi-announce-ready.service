@@ -1,0 +1,16 @@
+[Unit]
+Description=Annonce vocale confirmant le démarrage de Kodi et le bon fonctionnement du son
+After=kodi.service
+Requires=kodi.service
+PartOf=kodi.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-%h/raspberry_kodi_run/config/kodi-service.env
+# Petit délai pour laisser Kodi terminer son initialisation avant l'annonce.
+ExecStartPre=/bin/sleep 5
+ExecStart=%h/raspberry_kodi_run/scripts/announce-kodi-ready.py
+TimeoutStartSec=30
+
+[Install]
+WantedBy=kodi.service

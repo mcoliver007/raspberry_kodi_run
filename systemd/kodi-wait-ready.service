@@ -1,0 +1,18 @@
+[Unit]
+Description=Attente audio + enceinte Bluetooth + TTS Piper avant Kodi
+# On attend explicitement le service TTS Piper existant (unité utilisateur,
+# comme celle-ci).
+After=piper-tts.service sound.target bluetooth.target network-online.target
+Wants=piper-tts.service bluetooth.target
+Before=kodi.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-%h/raspberry_kodi_run/config/kodi-service.env
+ExecStart=%h/raspberry_kodi_run/scripts/wait-for-bluetooth-audio.sh
+ExecStart=%h/raspberry_kodi_run/scripts/wait-for-piper-tts.sh
+TimeoutStartSec=180
+
+[Install]
+WantedBy=default.target

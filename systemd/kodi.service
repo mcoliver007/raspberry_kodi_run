@@ -1,0 +1,21 @@
+[Unit]
+Description=Kodi Media Center (démarrage automatique)
+# Ne démarre qu'une fois l'audio + l'enceinte Bluetooth + le TTS Piper prêts.
+After=kodi-wait-ready.service
+Requires=kodi-wait-ready.service
+# Volontairement PAS de dépendance sur un écran/HDMI : Kodi doit démarrer
+# même sans câble HDMI branché (gestion du hotplug faite par Kodi/KMS).
+
+[Service]
+Type=simple
+EnvironmentFile=-%h/raspberry_kodi_run/config/kodi-service.env
+WorkingDirectory=%h/raspberry_kodi_run
+# KODI_EXEC (config/kodi-service.env) définit la commande réelle lancée ;
+# ce script se contente de l'exécuter (voir scripts/start-kodi.sh).
+ExecStart=%h/raspberry_kodi_run/scripts/start-kodi.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target
