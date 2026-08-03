@@ -50,6 +50,14 @@ unités référencent ce chemin via le spécificateur systemd `%h`.
   intacts après un `git pull`).
 - `scripts/install.sh` : lie les unités, active les services, active le
   démarrage sans connexion (`loginctl enable-linger`).
+- `scripts/list-addon-services.py` : liste les addons Kodi ayant un service
+  en arrière-plan (`service.py`), avec leur origine (dépôt officiel ou
+  tiers) — voir « Diagnostic : crash Python au démarrage/arrêt de Kodi ».
+- `scripts/diagnose-shutdown-crash.sh` : aide à corréler un SIGSEGV survenu
+  à l'arrêt de l'interpréteur Python avec l'addon en cause (log noyau,
+  coredump, log Kodi).
+- `scripts/remove-addon.sh` : désactive (réversible, via l'API Kodi) ou
+  désinstalle proprement un addon.
 
 ## Installation sur la Raspberry Pi
 
@@ -104,6 +112,51 @@ systemctl --user daemon-reload
   (une ligne JSON `{"mode": "fast", "text": "..."}` envoyée sur le socket ;
   le serveur synthétise et joue lui-même l'audio). Le mode `fast` est utilisé
   car le texte est court. Personnalisable via `ANNOUNCE_TEXT`.
+
+## Diagnostic : crash Python au démarrage/arrêt de Kodi
+
+Symptôme typique : Kodi crashe (SIGSEGV) dans `PyObject_GC_UnTrack`
+(libpython3.9) pendant l'arrêt de l'interpréteur Python — cause fréquente :
+un addon communautaire avec un **service en arrière-plan** (`service.py`,
+extension `xbmc.service`) laisse un thread Python actif (timer, requête
+réseau, etc.) au moment où Kodi finalise l'interpréteur. N'importe quel
+addon avec un service peut être en cause, pas nécessairement celui qu'on
+soupçonne au premier abord — d'où l'intérêt d'isoler le vrai coupable
+avant de désinstaller au hasard.
+
+Trois scripts, à lancer sur la Pi (utilisateur `pi`, pas root) :
+
+1. **Lister les suspects potentiels** — tous les addons avec un service en
+   arrière-plan, avec leur dépôt d'origine (les dépôts tiers non officiels,
+   comme un dépôt communautaire type « funstersplace », sont signalés) :
+   ```bash
+   ./scripts/list-addon-services.py --all
+   ```
+
+2. **Isoler le vrai coupable** — corrèle un segfault récent (log noyau) avec
+   les services actifs, et surtout tente d'extraire un **backtrace du
+   coredump** (seule preuve fiable ; la corrélation par log seule n'est
+   qu'indicative, plusieurs services tournant en parallèle) :
+   ```bash
+   ./scripts/diagnose-shutdown-crash.sh
+   ```
+   Si `systemd-coredump` n'est pas encore installé, le script indique la
+   commande à lancer, puis à relancer après le prochain crash pour obtenir
+   un backtrace exploitable (idéalement avec `python3-dbg` pour le niveau
+   Python via `py-bt`, pas seulement le niveau C).
+
+3. **Désactiver ou désinstaller** l'addon identifié :
+   ```bash
+   # Réversible : l'addon reste installé mais ne redémarre plus
+   # (nécessite Kodi lancé + serveur web HTTP activé dans les réglages) :
+   ./scripts/remove-addon.sh <addon-id> --disable-only
+
+   # Désinstallation complète (arrête kodi.service, supprime le dossier
+   # de l'addon + ses données) :
+   ./scripts/remove-addon.sh <addon-id>
+   ```
+   Pour retirer aussi un dépôt tiers non sécurisé une fois les addons
+   concernés désinstallés : `./scripts/remove-addon.sh repository.<id>`.
 
 ## Test manuel sans redémarrer la Pi
 
