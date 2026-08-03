@@ -4,9 +4,11 @@ Service de démarrage automatique de Kodi sur Raspberry Pi 3B, qui attend
 que la chaîne audio soit prête avant de lancer Kodi :
 
 1. le serveur PulseAudio de la session utilisateur `pi` répond ;
-2. une enceinte Bluetooth déjà appairée est **connectée et reçoit
-   effectivement l'audio** (sink `bluez_sink.*` à l'état `RUNNING`/`IDLE`,
-   pas `SUSPENDED`) ;
+2. une enceinte Bluetooth déjà appairée est **connectée** : un sink
+   `bluez_sink.*` apparaît dans `pactl list sinks` (PulseAudio décharge ce
+   sink automatiquement à la déconnexion, donc sa simple présence prouve la
+   connexion — son état `RUNNING`/`IDLE`/`SUSPENDED` n'est pas vérifié, un
+   sink `SUSPENDED` est juste un sink connecté mais inactif) ;
 3. le service de synthèse vocale Piper (`piper-tts.service`) est actif ;
 4. **alors seulement** Kodi démarre — même si aucun câble HDMI n'est
    branché sur la Pi (aucune dépendance sur un écran/HDMI n'est ajoutée,

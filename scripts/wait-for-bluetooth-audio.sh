@@ -4,9 +4,18 @@
 #
 # Bloque jusqu'à ce que :
 #   1. le serveur PulseAudio de la session utilisateur réponde ;
-#   2. ce serveur ait un sink Bluetooth (bluez_sink.*) actif et non "suspended",
-#      c'est-à-dire qu'une enceinte Bluetooth déjà appairée est bien
-#      connectée ET reçoit effectivement l'audio.
+#   2. ce serveur ait un sink Bluetooth (bluez_sink.*) dans sa liste, ce qui
+#      prouve que l'enceinte déjà appairée est bien connectée : PulseAudio
+#      décharge automatiquement la carte/le sink Bluetooth dès que
+#      l'appareil se déconnecte, donc la simple présence du sink dans
+#      "pactl list sinks" suffit comme preuve de connexion.
+#
+#      Volontairement, on ne filtre PAS sur l'état RUNNING/IDLE/SUSPENDED :
+#      un sink Bluetooth connecté mais inactif (aucun son en cours) est
+#      normalement à l'état SUSPENDED (mise en veille par PulseAudio pour
+#      économiser la liaison), ce qui ne veut absolument pas dire qu'il est
+#      déconnecté. Exiger RUNNING/IDLE ferait attendre indéfiniment tant
+#      qu'aucun son n'est joué.
 #
 # Ce script est exécuté par une unité systemd *utilisateur*
 # (kodi-wait-ready.service), donc déjà dans le bon contexte
@@ -43,29 +52,14 @@ while true; do
     sleep "$POLL_INTERVAL"
 done
 
-log "Attente d'un sink Bluetooth ('${BT_SINK_MATCH}') actif..."
+log "Attente de la connexion d'un sink Bluetooth ('${BT_SINK_MATCH}')..."
 while true; do
-    sinks="$(pactl list sinks 2>/dev/null || true)"
-
-    if [ -n "$sinks" ] && echo "$sinks" | grep -q "$BT_SINK_MATCH"; then
-        # On isole le bloc du sink bluetooth et on vérifie son état
-        # (RUNNING ou IDLE = connecté et prêt ; SUSPENDED = pas de flux/pas
-        # vraiment opérationnel).
-        state="$(echo "$sinks" | awk -v pat="$BT_SINK_MATCH" '
-            /^Sink #/ { in_bt = 0 }
-            $0 ~ "Name: .*" pat { in_bt = 1 }
-            in_bt && /State:/ { print $2; exit }
-        ')"
-
-        if [ "$state" = "RUNNING" ] || [ "$state" = "IDLE" ]; then
-            log "Sink Bluetooth trouvé et opérationnel (état: ${state})."
-            exit 0
-        else
-            log "Sink Bluetooth trouvé mais pas encore prêt (état: ${state:-inconnu})."
-        fi
-    else
-        log "Aucun sink Bluetooth détecté pour l'instant."
+    if pactl list sinks short 2>/dev/null | grep -q "$BT_SINK_MATCH"; then
+        log "Sink Bluetooth trouvé : enceinte connectée."
+        exit 0
     fi
+
+    log "Aucun sink Bluetooth détecté pour l'instant."
 
     if [ "$(date +%s)" -ge "$deadline" ]; then
         log "ERREUR: timeout en attendant l'enceinte Bluetooth après ${WAIT_TIMEOUT}s."
