@@ -68,21 +68,41 @@ else
     else
         log "Dernier coredump Kodi :"
         echo "  $dump_line"
-        dump_pid="$(echo "$dump_line" | awk '{print $2}')"
+        # Colonnes de "coredumpctl list --no-legend" :
+        #   JOUR AAAA-MM-JJ HH:MM:SS TZ PID UID GID SIG COREFILE EXE
+        dump_pid="$(echo "$dump_line" | awk '{print $5}')"
+        dump_state="$(echo "$dump_line" | awk '{print $9}')"
+        exe_path="$(echo "$dump_line" | awk '{print $NF}')"
         echo
-        if command -v gdb >/dev/null 2>&1; then
-            log "Extraction du backtrace de TOUS les threads (PID coredump: ${dump_pid})..."
-            log "(si 'py-bt' échoue avec une exception Python, les symboles de debug ne sont pas"
-            log " installés pour cette version de libpython3.9 — le backtrace C ci-dessous reste"
-            log " exploitable : cherche le nom de l'addon/du module dans les frames. Pour activer"
-            log " py-bt : sudo apt install -y python3-dbg)"
-            echo
-            coredumpctl debug "$dump_pid" --no-pager \
-                --debugger-arguments="-batch -ex 'set pagination off' -ex 'thread apply all bt' -ex 'thread apply all py-bt'" \
-                2>&1 | tail -n 300
-        else
+
+        if [ "$dump_state" != "present" ]; then
+            log "AVERTISSEMENT: coredump à l'état '${dump_state}' (pas 'present') — probablement"
+            log "purgé ou tronqué, l'extraction risque d'échouer."
+        fi
+
+        if ! command -v gdb >/dev/null 2>&1; then
             log "gdb non installé : sudo apt install -y gdb python3-dbg"
-            log "puis : coredumpctl debug ${dump_pid} --debugger-arguments=\"-batch -ex 'thread apply all bt' -ex 'thread apply all py-bt'\""
+            log "puis : coredumpctl dump ${dump_pid} --output=/tmp/kodi.core && gdb -batch -ex 'thread apply all bt' -ex 'thread apply all py-bt' '${exe_path}' /tmp/kodi.core"
+        else
+            core_file="$(mktemp --suffix=.core)"
+            log "Extraction du coredump (PID ${dump_pid}) vers ${core_file}..."
+            if coredumpctl dump "$dump_pid" --output="$core_file" >/dev/null 2>&1 && [ -s "$core_file" ]; then
+                log "Backtrace de TOUS les threads..."
+                log "(si 'py-bt' échoue avec une exception Python, les symboles de debug ne sont pas"
+                log " installés pour cette version de libpython3.9 — le backtrace C ci-dessous reste"
+                log " exploitable : cherche le nom de l'addon/du module dans les frames. Pour activer"
+                log " py-bt : sudo apt install -y python3-dbg)"
+                echo
+                gdb -q -batch \
+                    -ex "set pagination off" \
+                    -ex "thread apply all bt" \
+                    -ex "thread apply all py-bt" \
+                    "$exe_path" "$core_file" 2>&1 | tail -n 300
+            else
+                log "ERREUR: extraction du coredump échouée."
+                log "Essaie manuellement : coredumpctl dump ${dump_pid} --output=/tmp/kodi.core"
+            fi
+            rm -f "$core_file"
         fi
     fi
 fi
