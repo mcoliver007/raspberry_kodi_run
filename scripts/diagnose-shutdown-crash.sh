@@ -85,19 +85,26 @@ else
             log "puis : coredumpctl dump ${dump_pid} --output=/tmp/kodi.core && gdb -batch -ex 'thread apply all bt' -ex 'thread apply all py-bt' '${exe_path}' /tmp/kodi.core"
         else
             core_file="$(mktemp --suffix=.core)"
+            gdb_log="$(mktemp --suffix=.gdblog)"
             log "Extraction du coredump (PID ${dump_pid}) vers ${core_file}..."
             if coredumpctl dump "$dump_pid" --output="$core_file" >/dev/null 2>&1 && [ -s "$core_file" ]; then
-                log "Backtrace de TOUS les threads..."
+                log "Backtrace de TOUS les threads (30 frames les plus proches du crash, par thread)..."
                 log "(si 'py-bt' échoue avec une exception Python, les symboles de debug ne sont pas"
                 log " installés pour cette version de libpython3.9 — le backtrace C ci-dessous reste"
                 log " exploitable : cherche le nom de l'addon/du module dans les frames. Pour activer"
                 log " py-bt : sudo apt install -y python3-dbg)"
                 echo
+                # "bt 30" limite aux 30 frames les plus proches du crash PAR THREAD (celles qui
+                # importent) plutôt que de tronquer après coup, ce qui coupait la trace au mauvais
+                # endroit (les imports Python imbriqués génèrent facilement 300+ frames au total).
                 gdb -q -batch \
                     -ex "set pagination off" \
-                    -ex "thread apply all bt" \
-                    -ex "thread apply all py-bt" \
-                    "$exe_path" "$core_file" 2>&1 | tail -n 300
+                    -ex "set print frame-arguments none" \
+                    -ex "thread apply all bt 30" \
+                    -ex "thread apply all py-bt 30" \
+                    "$exe_path" "$core_file" > "$gdb_log" 2>&1
+                cat "$gdb_log"
+                log "Backtrace complet enregistré dans : $gdb_log (pas supprimé, à consulter/grep si besoin)."
             else
                 log "ERREUR: extraction du coredump échouée."
                 log "Essaie manuellement : coredumpctl dump ${dump_pid} --output=/tmp/kodi.core"
