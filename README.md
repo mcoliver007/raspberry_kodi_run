@@ -160,6 +160,43 @@ Trois scripts, à lancer sur la Pi (utilisateur `pi`, pas root) :
    Pour retirer aussi un dépôt tiers non sécurisé une fois les addons
    concernés désinstallés : `./scripts/remove-addon.sh repository.<id>`.
 
+### Cas résolu (2026-08-03) : ce n'était pas un addon
+
+Sur cette installation, l'analyse du backtrace de coredump (étape 2
+ci-dessus, `gdb` + `info sharedlibrary` sur le coredump) a montré que le
+crash **n'était pas causé par un addon** (ni `plugin.video.vstream`, ni le
+dépôt tiers funstersplace), mais par une bibliothèque Python installée au
+niveau système :
+
+```
+/usr/local/lib/python3.9/dist-packages/charset_normalizer/cd.cpython-39-arm-linux-gnueabihf.so
+```
+
+`charset_normalizer` est une dépendance standard de `requests`, utilisée
+par la quasi-totalité des addons vidéo qui font des requêtes HTTP — pas
+seulement vstream. Ses modules `cd.py`/`md.py` peuvent être compilés en
+extension native (mypyc) pour la performance ; la version pré-compilée
+récupérée via piwheels sur cette Pi (ARMhf) corrompt la mémoire pendant un
+`getattr()` déclenché par un import, avec un SIGSEGV dans
+`PyObject_GC_UnTrack` (libpython3.9) au passage. Comme Kodi utilise le
+`libpython3.9` du système, il voit (et est affecté par) ces paquets `pip`
+globaux.
+
+**Correctif** (réinstallation en pur Python, sans extension compilée) :
+```bash
+sudo pip3 uninstall -y charset-normalizer
+sudo pip3 install --no-binary=charset-normalizer charset-normalizer
+
+# Vérifier (doit afficher un chemin .py, pas .so) :
+python3 -c "import charset_normalizer.cd as m; print(m.__file__)"
+```
+Par défaut, une build depuis la source (`--no-binary`) ne compile pas
+l'extension mypyc — seule une wheel pré-compilée (comme celle de piwheels)
+l'embarque.
+
+Si le SIGSEGV revient malgré ce correctif, reprendre le diagnostic à
+l'étape 2 : le nouveau coredump peut pointer vers une autre cause.
+
 ## Test manuel sans redémarrer la Pi
 
 ```bash
