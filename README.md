@@ -110,6 +110,20 @@ systemctl --user daemon-reload
 - **Socket Piper** : `/tmp/piper_tts.sock` est vérifié en plus de l'état
   actif de `piper-tts.service`, pour s'assurer que le serveur a bien
   terminé son initialisation avant de démarrer Kodi.
+- **Réglage du volume depuis Kodi** : ce repo attend que le sink Bluetooth
+  soit connecté, mais ne configure pas la sortie audio de Kodi. Pour que
+  le curseur de volume natif de Kodi (celui affiché à l'écran avec
+  Vol+/Vol-, la molette de la souris ou l'icône haut-parleur du lecteur)
+  agisse réellement sur le volume PulseAudio de l'enceinte, il faut que la
+  sortie audio de Kodi soit branchée sur PulseAudio, pas sur ALSA direct :
+  Paramètres → Système → Audio → (niveau de paramètres "Standard" ou
+  "Expert" si besoin) → **Périphérique de sortie audio** → `PulseAudio`.
+  Vérification pendant la lecture : `pactl list sink-inputs` doit montrer
+  un flux `Kodi`. Si « PulseAudio » n'apparaît pas dans la liste (paquet
+  Kodi compilé sans support Pulse natif), router l'ALSA `default` vers
+  Pulse via `~/.asoundrc` (`pcm.!default { type pulse }` /
+  `ctl.!default { type pulse }`) puis choisir `ALSA:default` dans Kodi a
+  le même effet.
 - **Annonce vocale de confirmation** : suit le protocole du serveur Piper
   (une ligne JSON `{"mode": "fast", "text": "..."}` envoyée sur le socket ;
   le serveur synthétise et joue lui-même l'audio). Le mode `fast` est utilisé
